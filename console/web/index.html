@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<!-- viewport-fit=cover：让页面铺到折叠屏内屏的挖孔/圆角下面，
+     再由 CSS 的 env(safe-area-inset-*) 把内容让出来 -->
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1C1C1E" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="小智控制台">
+<meta name="format-detection" content="telephone=no">
+<title>小智控制台</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<script>
+/* 触控模式：真机（pointer: coarse）自动开；桌面上想预览折叠屏效果加 ?touch=1 */
+(function () {
+  var forced = /[?&]touch=1(&|$)/.test(location.search);
+  var coarse = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+  if (forced || coarse) document.documentElement.classList.add("touch");
+})();
+</script>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">智</div>
+      <div class="brand-text">
+        <div class="brand-name">小智控制台</div>
+        <div class="brand-sub">Xiaomi Sound · L16A</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item is-active" data-page="dashboard"><i data-ico="grid"></i>控制台</button>
+      <button class="nav-item" data-page="speak"><i data-ico="mic"></i>说话</button>
+      <button class="nav-item" data-page="agent"><i data-ico="brain"></i>智能体</button>
+      <button class="nav-item" data-page="voices"><i data-ico="wave"></i>音色</button>
+      <button class="nav-item" data-page="triggers"><i data-ico="target"></i>触发词</button>
+      <button class="nav-item" data-page="history"><i data-ico="clock"></i>历史</button>
+      <button class="nav-item" data-page="settings"><i data-ico="gear"></i>设置</button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <button class="engine-pill" id="enginePill" title="点击启动 / 停止引擎">
+        <span class="dot"></span><span id="engineState">检测中…</span>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- ============ 控制台 ============ -->
+    <section class="page is-active" id="page-dashboard">
+      <header class="page-head">
+        <h1>控制台</h1>
+        <p class="sub">引擎状态、一键体检、最近对话</p>
+      </header>
+
+      <div class="card engine-card">
+        <div class="engine-info">
+          <div class="engine-title">小爱音箱回答引擎</div>
+          <div class="engine-desc" id="engineDesc">xiaogpt 进程，负责把听到的问题转给智能体</div>
+        </div>
+        <div class="engine-actions">
+          <button class="btn btn-primary" id="btnEngineToggle">启动</button>
+          <button class="btn" id="btnEngineRestart">重启</button>
+        </div>
+      </div>
+
+      <div class="grid grid-4" id="statGrid">
+        <div class="card stat"><div class="stat-k">模型</div><div class="stat-v" id="statModel">—</div></div>
+        <div class="card stat"><div class="stat-k">音色</div><div class="stat-v" id="statVoice">—</div></div>
+        <div class="card stat"><div class="stat-k">密钥</div><div class="stat-v" id="statKey">—</div></div>
+        <div class="card stat"><div class="stat-k">触发词</div><div class="stat-v" id="statKeyword">—</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>健康检查</h2>
+          <button class="btn btn-sm" id="btnHealth">开始体检</button>
+        </div>
+        <div id="healthList" class="health-list">
+          <div class="empty">点「开始体检」跑一遍：密钥 / 模型 / 小米登录 / 音箱 / 网络 / 余额</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>最近对话</h2>
+          <button class="btn btn-sm" id="btnRefreshRecent">刷新</button>
+        </div>
+        <div id="recentList" class="empty">还没拉到记录</div>
+      </div>
+    </section>
+
+    <!-- ============ 说话 ============ -->
+    <section class="page" id="page-speak">
+      <header class="page-head">
+        <h1>说话</h1>
+        <p class="sub">手动打字让音箱念，或者让它先答再念</p>
+      </header>
+
+      <div class="card">
+        <textarea id="speakText" class="ta ta-lg" rows="6"
+          placeholder="要音箱说什么？"></textarea>
+        <div class="row row-end">
+          <span class="hint" id="speakHint"></span>
+          <button class="btn" id="btnPreview">先在电脑上试听</button>
+          <button class="btn" id="btnAskThenSpeak">问 AI 再念</button>
+          <button class="btn btn-primary" id="btnSpeak">让音箱说</button>
+        </div>
+        <audio id="previewAudio" controls style="display:none"></audio>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>发声参数</h2></div>
+        <div class="grid grid-3">
+          <label class="field">
+            <span class="field-k">音色</span>
+            <select id="speakVoice" class="in"></select>
+          </label>
+          <label class="field">
+            <span class="field-k">语速 <b id="vSpeed">1.00</b></span>
+            <input type="range" id="speakSpeed" min="0.5" max="2" step="0.05" value="1">
+          </label>
+          <label class="field">
+            <span class="field-k">响度 <b id="vVol">4.00</b></span>
+            <input type="range" id="speakVol" min="0.5" max="6" step="0.1" value="4">
+          </label>
+          <label class="field">
+            <span class="field-k">音调 <b id="vPitch">0</b></span>
+            <input type="range" id="speakPitch" min="-12" max="12" step="1" value="0">
+          </label>
+          <label class="field field-check">
+            <input type="checkbox" id="speakNative">
+            <span>用小爱原生音色（不走 MiniMax）</span>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 智能体 ============ -->
+    <section class="page" id="page-agent">
+      <header class="page-head">
+        <h1>智能体</h1>
+        <p class="sub">密钥、模型、人设</p>
+      </header>
+
+      <div class="card">
+        <div class="card-head"><h2>接入</h2></div>
+        <div class="grid grid-2">
+          <label class="field">
+            <span class="field-k">API 地址</span>
+            <input id="setApiBase" class="in" type="text" spellcheck="false">
+            <span class="hint">国内区 api.minimaxi.com · 国际区 api.minimax.io，key 不能跨区用</span>
+          </label>
+          <label class="field">
+            <span class="field-k">API Key</span>
+            <div class="row">
+              <input id="setApiKey" class="in" type="password" spellcheck="false" placeholder="留空表示不改">
+              <button class="btn btn-sm" id="btnToggleKey" type="button">显示</button>
+            </div>
+            <span class="hint" id="keyHint"></span>
+          </label>
+          <label class="field">
+            <span class="field-k">模型</span>
+            <div class="row">
+              <select id="setModel" class="in"></select>
+              <button class="btn btn-sm" id="btnRefreshModels" type="button">拉取</button>
+            </div>
+            <span class="hint" id="modelHint"></span>
+          </label>
+          <label class="field">
+            <span class="field-k">智能体名字 <span class="hint-inline">（音箱会念出来）</span></span>
+            <input id="setAgentName" class="in" type="text">
+          </label>
+          <label class="field">
+            <span class="field-k">回答长度上限 <b id="vMaxTok">500</b></span>
+            <input type="range" id="setMaxTokens" min="100" max="2000" step="50" value="500">
+          </label>
+          <label class="field field-check">
+            <input type="checkbox" id="setThinking">
+            <span>关闭思考（关掉才秒回）</span>
+          </label>
+        </div>
+        <div class="row row-end">
+          <button class="btn btn-primary" id="btnSaveAgent">保存</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>人设（system prompt）</h2></div>
+        <textarea id="setPrompt" class="ta" rows="7"></textarea>
+        <div class="row row-end">
+          <span class="hint">改完点保存即刻生效，不用重启引擎</span>
+          <button class="btn btn-primary" id="btnSavePrompt">保存人设</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>对话测试台</h2><span class="hint-inline">不经过音箱</span></div>
+        <div class="row">
+          <input id="askInput" class="in" type="text" placeholder="问一句试试">
+          <button class="btn" id="btnAsk">问</button>
+        </div>
+        <div id="askOutput" class="answer empty">答案会出现在这里</div>
+      </div>
+    </section>
+
+    <!-- ============ 音色 ============ -->
+    <section class="page" id="page-voices">
+      <header class="page-head">
+        <h1>音色</h1>
+        <p class="sub">点「试听」直接让音箱念一句，选中后设为默认</p>
+      </header>
+
+      <div class="card">
+        <div class="grid grid-3">
+          <label class="field">
+            <span class="field-k">音色来源</span>
+            <select id="ttsSource" class="in"></select>
+          </label>
+          <label class="field">
+            <span class="field-k">TTS 模型</span>
+            <select id="ttsModel" class="in"></select>
+          </label>
+          <label class="field">
+            <span class="field-k">试听文案</span>
+            <input id="auditionText" class="in" type="text" value="你好，我是小智。">
+          </label>
+          <label class="field">
+            <span class="field-k">语速 <b id="vSpeed2">1.00</b> · 响度 <b id="vVol2">4.00</b> · 音调 <b id="vPitch2">0</b></span>
+            <div class="row">
+              <input type="range" id="audSpeed" min="0.5" max="2" step="0.05" value="1">
+              <input type="range" id="audVol" min="0.5" max="6" step="0.1" value="4">
+              <input type="range" id="audPitch" min="-12" max="12" step="1" value="0">
+            </div>
+          </label>
+        </div>
+        <p class="hint" id="ttsSourceHint" style="margin-top:8px"></p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>音色库</h2><span class="hint-inline" id="voiceCount"></span></div>
+        <div id="voiceGrid" class="voice-grid"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>克隆音色</h2>
+          <span class="hint-inline"><button class="btn btn-sm" id="btnLoadCloned">刷新</button></span>
+        </div>
+        <p class="hint" id="clonedHint" style="margin:0 0 10px"></p>
+        <div id="clonedGrid" class="voice-grid"></div>
+      </div>
+    </section>
+
+    <!-- ============ 触发词 ============ -->
+    <section class="page" id="page-triggers">
+      <header class="page-head">
+        <h1>触发词</h1>
+        <p class="sub">决定哪些话转给智能体，哪些留给小爱原生</p>
+      </header>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>智能体唤醒词</h2>
+          <span class="hint-inline">说了这个就走小智</span>
+        </div>
+        <div id="wakeupChips" class="chips"></div>
+        <div class="row">
+          <input id="wakeupInput" class="in" type="text" placeholder="加一个唤醒词，回车确认">
+          <button class="btn btn-sm" id="btnAddWakeup">添加</button>
+        </div>
+        <span class="hint">小爱音箱的「小爱同学」会被音箱自己吃掉、记录里没有，所以用「小智同学」这类自己说的词来区分：说「小智同学，帮我查天气」走小智，只说「小爱同学」走原生小爱。</span>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>触发词</h2>
+          <span class="hint-inline">命中且在句子开头才转 AI</span>
+        </div>
+        <div id="kwChips" class="chips"></div>
+        <div class="row">
+          <input id="kwInput" class="in" type="text" placeholder="加一个触发词，回车确认">
+          <button class="btn btn-sm" id="btnAddKw">添加</button>
+        </div>
+        <span class="hint">顺序有意义：长的放前面，剥离时取第一个匹配的</span>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>排除词</h2>
+          <span class="hint-inline">智能家居指令优先还给小爱</span>
+        </div>
+        <div id="exChips" class="chips"></div>
+        <div class="row">
+          <input id="exInput" class="in" type="text" placeholder="加一个排除词，回车确认">
+          <button class="btn btn-sm" id="btnAddEx">添加</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>实时测试</h2></div>
+        <div class="row">
+          <input id="judgeInput" class="in" type="text" placeholder="输入一句话，看它会走哪条路">
+          <button class="btn" id="btnJudge">测试</button>
+        </div>
+        <div id="judgeOutput" class="judge empty">测试结果会出现在这里</div>
+      </div>
+    </section>
+
+    <!-- ============ 历史 ============ -->
+    <section class="page" id="page-history">
+      <header class="page-head">
+        <h1>历史</h1>
+        <p class="sub">从小米云拉的对话记录</p>
+      </header>
+      <div class="card">
+        <div class="card-head">
+          <h2>记录</h2>
+          <button class="btn btn-sm" id="btnRefreshHistory">刷新</button>
+        </div>
+        <div id="historyList" class="empty">还没拉到记录</div>
+      </div>
+    </section>
+
+    <!-- ============ 设置 ============ -->
+    <section class="page" id="page-settings">
+      <header class="page-head">
+        <h1>设置</h1>
+        <p class="sub">设备、引擎日志</p>
+      </header>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>账号下的设备</h2>
+          <button class="btn btn-sm" id="btnRefreshDevices">刷新</button>
+        </div>
+        <div id="deviceList" class="empty">还没拉到设备</div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>音箱音量</h2>
+          <div class="row">
+            <button class="btn btn-sm" id="btnReadVolume">读取</button>
+            <button class="btn btn-sm btn-primary" id="btnApplyVolume">应用</button>
+          </div>
+        </div>
+        <div class="row">
+          <input type="range" id="speakerVol" min="0" max="100" step="1" value="50">
+          <b id="speakerVolLabel" style="min-width:56px;text-align:right">50</b>
+        </div>
+        <p class="hint" style="margin-top:8px">
+          这是音箱自己的系统音量（0-100），改的是喇叭输出增益，怎么调都不会破音。
+          和「音色」页的 vol 不是一回事 —— 那个改的是合成音频的波形，放大过头会削波。
+          想让回答更响，优先调这里。
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>MIoT 设备控制</h2>
+          <button class="btn btn-sm" id="btnRefreshMiot">读取状态</button>
+        </div>
+        <div id="miotState" class="empty">还没读取</div>
+        <div class="miot-row">
+          <button class="btn btn-sm" id="btnMicMute">麦克风静音</button>
+          <button class="btn btn-sm" id="btnNoDisturb">打开勿扰</button>
+          <button class="btn btn-sm" id="btnMiotWake">唤醒音箱</button>
+        </div>
+        <div class="miot-row">
+          <input type="text" id="miotText" class="in" placeholder="云端播报：让小米云念这一段">
+          <button class="btn btn-sm btn-primary" id="btnMiotSpeak">播报</button>
+        </div>
+        <p class="hint" style="margin-top:8px">
+          走 MIoT 云端通道（api.io.mi.com），和「说话」按钮的小米云对话是<b>两套独立登录态</b>。<br>
+          <b>麦克风静音</b>会让音箱听不见唤醒词（小爱同学、小智同学一起失灵），写完约 30 秒才生效；<br>
+          <b>云端播报</b>用小米自己的音色（本机不在线也能念），不是小智的音色。
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>显示环境</h2>
+          <button class="btn btn-sm" id="btnRefreshViewport">刷新</button>
+        </div>
+        <div id="viewportInfo" class="empty">读取中…</div>
+        <p class="hint" style="margin-top:8px">
+          折叠屏展开 / 收起时浏览器会换视口，这页的数字会跟着变。
+          展开后横屏拿（宽度约 800px 以上）会用宽屏布局，
+          竖屏拿（约 550px）用两列布局，合盖（约 400px）单列。
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>引擎日志</h2>
+          <div class="row">
+            <label class="field-check"><input type="checkbox" id="logAuto" checked><span>自动滚动</span></label>
+            <button class="btn btn-sm" id="btnClearLog">清屏</button>
+          </div>
+        </div>
+        <pre id="logBox" class="logbox"></pre>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>路径</h2></div>
+        <div class="kv"><span>配置文件</span><code id="pathConfig"></code></div>
+        <div class="kv"><span>凭据</span><code id="pathEnv"></code></div>
+        <div class="kv"><span>小米登录态</span><code id="pathToken"></code></div>
+        <div class="kv"><span>项目目录</span><code id="pathRoot"></code></div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="statusbar">
+    <span class="sb-item" id="sbModel">模型 —</span>
+    <span class="sb-sep"></span>
+    <span class="sb-item" id="sbVoice">音色 —</span>
+    <span class="sb-sep"></span>
+    <span class="sb-item" id="sbBalance">余额 —</span>
+    <span class="sb-sep"></span>
+    <span class="sb-item" id="sbSpeaker">音箱 —</span>
+    <span class="sb-grow"></span>
+    <span class="sb-item sb-muted" id="sbMsg"></span>
+  </footer>
+</div>
+<script src="bridge-http.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

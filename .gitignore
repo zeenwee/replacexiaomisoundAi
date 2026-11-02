@@ -1,0 +1,24 @@
+# 凭据 —— 绝不入库
+.env
+*.token
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+xiaogpt-env/
+
+# 打包产物
+build/
+dist/
+.pyi_stage/
+
+# macOS
+.DS_Store
+
+# 编辑器
+.idea/
+.vscode/
+*_bak

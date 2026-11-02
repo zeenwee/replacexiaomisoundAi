@@ -1,0 +1,170 @@
+# ===== xiaogpt 配置 —— Xiaomi Sound (L16A) → 自有 MiniMax 智能体 =====
+# 启动：./run.sh        配套说明见 docs/部署指南.md
+
+# ---------- 设备 ----------
+# 实测型号，来自音箱 mDNS 广播的 model 字段
+hardware: "L16A"
+# 小米云端设备列表里的 miotDID；留空会尝试按型号自动匹配。
+# 如果启动报 "cannot find did for hardware"，用 tools/list_devices.py 查了填这里。
+# 也可以用环境变量 MI_DID 覆盖（优先级更高）。
+mi_did: ""
+
+# ---------- 智能体 ----------
+# bot: minimax 由 mybot/main.py 在运行时注册进 xiaogpt 的 BOTS 表，
+# 不需要改 venv 里的 site-packages，也不需要打补丁。
+bot: minimax
+
+# MiniMax 中国大陆区 OpenAI 兼容接口。
+# 国际区账号请改成 "https://api.minimax.io/v1"
+# ⚠️ key 不能跨区域用：国内 key 打到国际域名会 401，反之亦然。
+api_base: https://api.minimaxi.com/v1
+
+# API key 建议放 .env 里的 MINIMAX_API_KEY（run.sh 会自动载入 .env）。
+# 这里留空即可；非要写在这里也行，但别提交到 git。
+openai_key: ""
+
+# ---------- 模型参数 ----------
+gpt_options:
+  model: MiniMax-M3
+
+  # 音箱场景首字延迟最关键：MiniMax-M3 默认会先思考再答，
+  # 关掉 thinking 之后直接作答。
+  # ⚠️ 换成 MiniMax-M3.1-Flash 时这一整段要删掉 —— 那个模型强制思考，
+  #    写 disabled 会直接返回 400，要改成 reasoning_effort: low。
+  extra_body:
+    thinking:
+      type: disabled
+
+  # 回答长度上限。中文 100 字大约 150 token，留够余量。
+  max_tokens: 500
+
+  # 智能体名字：xiaogpt 会念「正在问<名字>请耐心等待」，所以别用英文。
+  agent_name: 小智
+
+  # 系统人设（真正的 system 角色，不是拼在问题后面）。
+  # 想临时换人设：对音箱说「更改提示词 你是一个中医专家」。
+  system_prompt: >-
+    你是音箱上的语音助手，你的回答会被直接朗读出来。要求：
+    1）用中文口语回答，控制在 100 字以内；
+    2）只讲结论，不要用 Markdown 列表符、编号、标题、代码块或链接；
+    3）不要复述问题，不要说“好的，我来帮你查一下”这类废话；
+    4）不知道就直说不知道，不要编造。
+
+# ---------- 音箱系统音量 ----------
+# 0-100。这是**音箱自己的**音量旋钮（改喇叭输出增益，不会破音）。
+#
+# 和下面 tts_options.vol 的区别：
+#   - vol           改合成音频的波形，放大过头会削波失真（破音）
+#   - speaker_volume 改喇叭输出增益，怎么调都不破音
+#
+# 想让回答更响，优先调这个。留空则不动音箱音量（交给米家 App 调）。
+speaker_volume: 85
+
+# ---------- 语音 ----------
+# mi      = 用小爱音箱原生音色（走小米云 ubus，零额外配置，延迟最低）
+# minimax = 用 MiniMax TTS 合成，音色和小爱原生不同（多约 0.5s 合成延迟）
+tts: mi
+tts_options:
+  # 模型：speech-2.6-turbo 最快且质量够用；想要更好音质换 speech-2.6-hd
+  model: speech-2.6-hd
+  # 音色：见 mybot/minimax_tts.py 的 AVAILABLE_VOICES（14 个实测可用）
+  #   男声系：male-qn-qingse 青涩青年 / male-qn-jingying 精英青年
+  #           male-qn-badao 霸道青年 / male-qn-daxuesheng 青年大学生
+  #           presenter_male 男性主持人 / energetic_boy 活力男声
+  #   女声系：female-shaonv 少女 / female-chengshu 成熟女声
+  #           female-tianmei 甜美女声 / presenter_female 女性主持人
+  #           lovely_girl 可爱女声 / sweet_girl 甜心女声
+  #   朗读系：audiobook_male_1 / audiobook_female_1
+  voice: female-shaonv
+  speed: 1
+  # vol 是**合成音频的波形增益**，不是响度旋钮。
+  # 实测同一句话（16bit 解码）：
+  #   vol=1 → RMS -24.0dBFS  峰值 -9.6dBFS
+  #   vol=2 → RMS -17.2dBFS  峰值 -1.3dBFS
+  #   vol=4 → RMS -12.1dBFS  峰值 -0.3dBFS（削波样本 0）
+  #   vol=6 → RMS  -9.2dBFS  峰值 -0.2dBFS（已经顶到天花板，再加也没多少）
+  # 服务端会做归一化，所以增益到 4 以后收益就饱和了。
+  # 默认给到 4 —— 小爱原生音色明显比 vol=1 响，1 听着太轻。
+  # 想要更响请调上面的 speaker_volume（音箱系统音量，改增益不破音）。
+  vol: 4
+  pitch: 0
+# AI 回答时让小爱别同时插话；不影响智能家居指令
+mute_xiaoai: true
+# 流式输出，首字更快（MiTTS 会一句一句念，边生成边说）
+stream: true
+
+# ---------- 智能体专属唤醒词 ----------
+# 小爱音箱的唤醒词「小爱同学」会被音箱自己吃掉，小米云对话记录里根本没有它
+# （实测记录开头就是「请」）。所以区分两条路的不是「小爱同学」，
+# 而是你自己说的第二个词：
+#
+#   「小爱同学」→ 原生小爱（记录里是「帮我查天气」这类）
+#   「小智同学」→ 自定义智能体（记录里是「小智同学，帮我查天气」）
+#
+# 「小智同学」是你自己说的话，一定留在记录里，所以拿它当唤醒词可靠。
+# 命中后会先剥掉「小智同学」和它后面的逗号，再把剩下的问题问模型。
+#
+# 想改唤醒词直接改这里，或在控制台「触发词」页里改。
+agent_wakeup:
+  - 小智同学
+  - 小智
+
+# ---------- 触发方式 ----------
+# 只有以这些词开头的指令才会转给 AI；其余指令（如"打开客厅灯"）由小爱原生执行。
+#
+# ⚠️ 触发词必须在「小爱同学」之后的第一位：唤醒词会被音箱自己吃掉，小米云
+#    记录里已经没有它了。所以「小爱同学，你帮我查天气」不会触发（开头是"你"）。
+#    长的词放前面，xiaogpt 剥离触发词时按这个顺序取第一个匹配的。
+keyword:
+  - 帮我
+  - 请问
+  - 请
+  - 我问一下
+  - 问一下
+  - 智能助手
+  - 告诉我
+  - 我想知道
+  - 我想问
+  - 为什么
+  - 怎么回事
+  - 什么是
+  - 怎么
+  - 如何
+  - 能不能
+  - 可不可以
+  - 有没有
+  - 介绍
+  - 解释
+  - 说说
+  - 讲讲
+
+# ---------- 触发排除 ----------
+# 这些词开头的指令，就算同时命中了上面的触发词，也仍然交给小爱原生执行。
+# 解决的是"请打开客厅灯"被"请"命中、结果灯没开而 AI 在那瞎说的问题。
+# （由 mybot/main.py 在运行期接管 need_ask_gpt 实现，不改 site-packages）
+exclude_keyword:
+  - 打开
+  - 关闭
+  - 开启
+  - 关掉
+  - 播放
+  - 暂停
+  - 调大
+  - 调小
+  - 调高
+  - 调低
+  - 设置
+  - 定个
+  - 设个
+  - 提醒
+  - 切换
+  - 停止
+  - 取消
+# 持续对话（说"开始持续对话"进入）
+start_conversation: 开始持续对话
+end_conversation: 结束持续对话
+
+# ---------- 提示词 ----------
+# 人设在 gpt_options.system_prompt 里，这里留空，
+# 避免 xiaogpt 再把提示词拼到问题后面（重复一遍）。
+prompt: ""
